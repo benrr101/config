@@ -1,0 +1,20 @@
+"*":
+  core:
+    audioBeep: false
+    openEmptyEditorOnStart: false
+    themes: [
+      "atom-dark-ui"
+      "one-dark-syntax"
+    ]
+  editor:
+    invisibles: {}
+    preferredLineLength: 100
+    scrollPastEnd: true
+    showInvisibles: true
+    tabType: "soft"
+  "exception-reporting":
+    userId: "1d893b3e-70c4-1c84-77be-6f7cf039ed29"
+  "file-watcher":
+    promptWhenChange: true
+  welcome:
+    showOnStartup: false
