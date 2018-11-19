@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# DESCRIPTION ##############################################################
+# This script creates a partition from an AWS instance store (ephemeral drive)
+# and mounts it wherever requested
+
+# USAGE ####################################################################
+USAGE=<<<EOF
+aws-mount-ephemeral device mount_target
+  device       - device to partition, format. Eg. /dev/nvme1n1
+  mount_target - location to mount partition. Eg. /tmp
+EOF
+
+# SCRIPT ###################################################################
+# Verify Arguments
+if [ -z "$1" ] || [ "$2" ]; then
+	echo "Required arguments missing"
+	echo $USAGE
+	exit 0
+fi
+
+DEVICE=$1
+MOUNT=$2
+
+# Create partition
+echo 'type=83' | sudo sfdisk $DEVICE
+PARTITION=`lsblk $DEVICE | tail -n 1 | cut -d " " -f 1 | cut -c 7-`
+
+# Format partition
+mkfs.ext4 /dev/$PARTITION
+
+# Mount partition
+mount -t ext4 /dev/$PARTITION /tmp && chmod 1777 /tmp

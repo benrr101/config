@@ -1,0 +1,10 @@
+[Unit]
+Description=Mount ephemeral drive
+
+[Service]
+ExecStart=/sbin/aws-mount-ephemeral /dev/nvme1n1 /tmp
+Type=oneshot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
