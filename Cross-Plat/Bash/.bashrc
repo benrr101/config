@@ -24,4 +24,4 @@ alias grep="grep --color=auto"
 export PS1="[\u@\h \[\033[38;5;6m\]\W\[$(tput sgr0)\]]\\$ "
 
 # CUSTOM FUNCTIONALITY #####################################################
-. ./.bash_git.sh
+. ~/.bash_git.sh
