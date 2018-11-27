@@ -2,32 +2,88 @@
 
 # DESCRIPTION ##############################################################
 # This script creates a partition from an AWS instance store (ephemeral drive)
-# and mounts it wherever requested
+# and mounts it wherever requested.
+# Prerequisite: nvme-cli
+# NOTE: DO NOT USE IF THERE ARE >1 EPHEMERAL DRIVE
 
 # USAGE ####################################################################
-USAGE=<<<EOF
-aws-mount-ephemeral device mount_target
-  device       - device to partition, format. Eg. /dev/nvme1n1
+USAGE=$(cat <<'EOF'
+aws-mount-ephemeral mount_target
   mount_target - location to mount partition. Eg. /tmp
 EOF
+)
+
+# FUNCTIONS ################################################################
+get_formatted () {
+	file -s "/dev/$1" | grep "ext4 filesystem"
+}
+
+get_partition () {
+	lsblk "$1" | grep part
+}
 
 # SCRIPT ###################################################################
 # Verify Arguments
-if [ -z "$1" ] || [ "$2" ]; then
+if [ -z "$1" ]; then
 	echo "Required arguments missing"
-	echo $USAGE
+	echo "$USAGE"
 	exit 0
 fi
+MOUNT=$1
 
-DEVICE=$1
-MOUNT=$2
+# Find the ephemeral device
+# AWS doesn't seem to preserve the device id from boot to boot, so we need to
+# discover it. Also if the machine is just rebooted, the ephemeral disk will 
+# persist. We don't want to blow it up.
+DEVICE=`nvme list | grep "Instance Storage" | cut -d " " -f 1`
+PARTITION=$(get_partition $DEVICE)
+if [ -z "$PARTITION" ]; then
+	# Partition does not exist, create it
+	echo 'type=83' | sfdisk "$DEVICE" || { echo "fdisk failed, exiting" && exit; }
 
-# Create partition
-echo 'type=83' | sudo sfdisk $DEVICE
-PARTITION=`lsblk $DEVICE | tail -n 1 | cut -d " " -f 1 | cut -c 7-`
+	# Find the created partition
+	partprobe
+	PARTITION=$(get_partition $DEVICE)
+	if [ -z "$PARTITION" ]; then
+		# Partition wasn't found. Wait a couple seconds then try again
+		echo "Partition could not be found after creation, retrying..."
+		sleep 2
+		partprobe
+		PARTITION=$(get_partition $DEVICE)
+		if [ -z "$PARTITION" ]; then
+			echo "Partition could not be found after creation, exiting"
+			exit 1
+		fi
+	fi
+else
+	echo "Partition already exists on $DEVICE, skipping partition creation"
+fi
+PARTITION=`echo "$PARTITION" | cut -d " " -f 1 | cut -c 7-`
 
 # Format partition
-mkfs.ext4 /dev/$PARTITION
+FORMATTED=$(get_formatted $PARTITION)
+if [ -z "$FORMATTED" ]; then
+	# Partition needs to be formatted
+	mkfs.ext4 -F /dev/$PARTITION
+	
+	# Make sure the formatted partition is found
+	partprobe
+	FORMATTED=$(get_formatted $PARTITION)
+	if [ -z "$FORMATTED" ]; then
+		# Partition wasn't found. Wait a couple seconds then try again
+		echo "Formatted partition was not found after formatting, retrying..."
+		sleep 2
+		partprobe
+		FORMATTED=$(get_formatted $PARTITION)
+		if [ -z "$FORMATTED" ]; then
+			echo "Formatted partition not found, exiting"
+			exit 1
+		fi
+	fi
+else
+	echo "Partition $PARTITION is already formatted ext4, skipping formatting"
+fi
 
 # Mount partition
-mount -t ext4 /dev/$PARTITION /tmp && chmod 1777 /tmp
+mount /dev/$PARTITION $MOUNT && chmod 1777 $MOUNT
+

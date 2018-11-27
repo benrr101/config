@@ -1,8 +1,8 @@
 [Unit]
-Description=Mount ephemeral drive
+Description=Mount ephemeral drive to tmp
 
 [Service]
-ExecStart=/sbin/aws-mount-ephemeral /dev/nvme1n1 /tmp
+ExecStart=/sbin/aws-mount-ephemeral /tmp
 Type=oneshot
 RemainAfterExit=yes
 
