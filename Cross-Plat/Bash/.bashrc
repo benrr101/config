@@ -28,7 +28,7 @@ export PS1="[\u@\h \[\033[38;5;6m\]\W\[$(tput sgr0)\]]\\$ "
 . ~/.bash_git.sh
 
 ## rbenv initialization
-if [[ -d "$HOME"/.rbenv/bin" ]]
+if [[ -d "$HOME/.rbenv/bin" ]]
 then
     eval "$(rbenv init -)"
 fi
