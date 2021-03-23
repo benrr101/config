@@ -24,4 +24,12 @@ alias grep="grep --color=auto"
 export PS1="[\u@\h \[\033[38;5;6m\]\W\[$(tput sgr0)\]]\\$ "
 
 # CUSTOM FUNCTIONALITY #####################################################
+## Git tab-completion
 . ~/.bash_git.sh
+
+## rbenv initialization
+if [[ -d "$HOME"/.rbenv/bin" ]]
+then
+    eval "$(rbenv init -)"
+fi
+
