@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Waterfox
+Exec=/home/benrr101/bin/waterfox
+Icon=/home/benrr101/bin/waterfox-files/browser/chrome/icons/default/default32.png
+Categories=Network;
+

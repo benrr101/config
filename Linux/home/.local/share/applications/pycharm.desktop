@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=PyCharm
+Icon=/home/benrr101/bin/pycharm-2020.3.5/bin/pycharm.png
+Exec=/home/benrr101/bin/pycharm
+Categories=Development;
+
