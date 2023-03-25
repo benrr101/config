@@ -7,6 +7,13 @@ if [ -f /etc/bashrc ]; then
 	. /etc/bashrc
 fi
 
+if [[ "$PLATFORM" == 'cygwin' ]] || [[ "$PLATFORM" == 'msys' ]]
+then
+  NULL=NUL
+else
+  NULL=/dev/null
+fi
+
 # OS SPECIFIC DEFS #########################################################
 if [[ "$PLATFORM" == 'Darwin' ]]
 then
@@ -41,7 +48,7 @@ fi
 . ~/.bash_git.sh
 
 ## rbenv initialization
-which rbenv > /dev/null
+which rbenv > $NULL 2>&1
 if [[ $? -eq 0 ]]
 then
     eval "$(rbenv init -)"
