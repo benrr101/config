@@ -30,7 +30,11 @@ alias cls="clear"
 alias grep="grep --color=auto"
 
 # RHEL PROMPT ##############################################################
-export PS1="[\u@\h \[\033[38;5;6m\]\W\[$(tput sgr0)\]]\\$ "
+if [[ -t 1 ]]
+then
+  # Only change prompt if we're in an interactive terminal
+  export PS1="[\u@\h \[\033[38;5;6m\]\W\[$(tput sgr0)\]]\\$ "
+fi
 
 # CUSTOM FUNCTIONALITY #####################################################
 ## Git tab-completion
