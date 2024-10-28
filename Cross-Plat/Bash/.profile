@@ -8,4 +8,10 @@ then
     PATH="$HOME/.rbenv/bin:$PATH"
 fi
 
+## Add dornet if it's installed
+if [[ -d "$HOME/.dotnet"]]
+then
+    PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
+fi
+
 export PATH
