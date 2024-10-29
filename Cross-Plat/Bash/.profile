@@ -1,5 +1,7 @@
+# ~/.profile
+
 # PATH OVERRIDES ###########################################################
-PATH="$PATH:$PATH:$HOME/.local/bin"
+PATH="$PATH:$HOME/.local/bin"
 PATH="$PATH:$HOME/bin"
 
 ## Add rbenv if it's installed
@@ -8,10 +10,11 @@ then
     PATH="$HOME/.rbenv/bin:$PATH"
 fi
 
-## Add dornet if it's installed
-if [[ -d "$HOME/.dotnet"]]
+## Add dotnet if it's installed
+if [[ -d "$HOME/.dotnet" ]]
 then
-    PATH="$HOME/.dotnet:$HOME/.dotnet/tools:$PATH"
+    PATH="$HOME/.dotnet:$PATH"
+    PATH="$HOME/.dotnet/tools:$PATH"
 fi
 
 export PATH

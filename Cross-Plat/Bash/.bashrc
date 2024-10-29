@@ -1,4 +1,4 @@
-# .bashrc
+# ~/.bashrc
 
 PLATFORM=`uname`
 
@@ -53,4 +53,13 @@ if [[ $? -eq 0 ]]
 then
     eval "$(rbenv init -)"
 fi
+
+# SOURCE PROFILE ###########################################################
+# In interactive shells, .profile is not loaded, so it must be loaded here but only if it has not
+# already been loaded.
+if [ -f ~/.profile ]
+then
+    . ~/.profile
+fi
+
 

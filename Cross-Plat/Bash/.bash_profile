@@ -1,5 +1,5 @@
-# .bash_profile
+# ~/.bash_profile
 
-. ~/.profile
-. ~/.bashrc
+[ -f ~/.profile ] && . ~/.profile
+[ -f ~/.bashrc ] && . ~/.bashrc
 
