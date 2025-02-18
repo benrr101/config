@@ -82,53 +82,60 @@ function handleReleasePageMatrixBarcodeReady() {
             continue;
         }
 
-        const rawLabel = itemSplit[0];
+        const rawLabel = itemSplit[0].trim();
         const rawValue = itemSplit.slice(1).join(": ");
 
-        // Determine which variants this item applies to
-
-        // Case 0: Not a variant
-        const variantMatch = rawLabel.match(/(.+)(\(Variant.+?\))/i);
-        if (!variantMatch) {
-            // This doesn't have a variant in the label, throw it into the general bin
+        // Extract description field
+        const descriptionMatch = rawLabel.match(/\((.+)\)/);
+        if (!descriptionMatch) {
+            // This item doesn't have a description
             generalItems.push({ label: rawLabel, value: rawValue });
             continue;
         }
 
-        const variantString = variantMatch[2];
+        const rawDescription = descriptionMatch[1];
+        const labelString = rawLabel.replace(descriptionMatch[0], "").trim();
 
         // @TODO: Handle "All Variants"
 
-        // Case 1: 1, 1-3, etc
-        const foundVariants = new Set();
-        const variantIdMatches = variantString.match(/(\d+\s*-\*\d+|\d+)/g)
-        if (!variantIdMatches) {
-            // This item doesn't have any specified variants
-            generalItems.push({ label: rawLabel, value: rawValue});
+        // Find variant values
+        const variantMatch = rawDescription.match(/Variant(?:s?)\s*\b\d+\s*(?:-\s*\d+|to\s*\d+)?\b(?:\s*(?:,|&|and|,\s*&|,\s*and)\s*\b\d+\s*(?:-\s*\d+|to\s*\d+)?\b)*/i);
+        if (!variantMatch) {
+            // This item doesn't have any descriptions listed
+            generalItems.push({ label: rawLabel, value: rawValue });
             continue;
         }
 
-        for (const variantIdMatch of variantIdMatches) {
-            const variantRangeMatch = variantIdMatch.match(/(\d+)\s*-\s*(\d+)/);
-            if (variantRangeMatch) {
-                // Case 1.1: Ranges like 1-3
-                const lowerBound = parseInt(variantRangeMatch[1]);
-                const upperBound = parseInt(variantRangeMatch[2]);
-                for (let i = lowerBound; i <= upperBound; i++) {
-                    foundVariants.add(i.toString());
-                }
-            } else {
-                // Case 1.2: Exact numbers
-                foundVariants.add(variantIdMatch);
+        const foundVariants = new Set();
+        let variantString = variantMatch[0];
+
+        // Extract variant ranges
+        const variantRangeMatches = variantString.matchAll(/(\d+)\s*(?:-|to)\s*(\d+)/gi);
+        for (const range of variantRangeMatches) {
+            const lowerBound = parseInt(range[1]);
+            const upperBound = parseInt(range[2]);
+            for (let i = lowerBound; i <= upperBound; i++) {
+                foundVariants.add(i.toString());
             }
+
+            variantString = variantString.replace(range[0], "");
         }
 
-        // Parse the label to remove variant
-        // @TODO: Handle "Matrix / Runout (Variant 1, 2, 3, blah blah blah)" into "Matrix / Runout (blah blah blah)"
-        const label = variantMatch[1].trim();
+        // Extract exact numbers
+        const variantIdMatches = variantString.matchAll(/\d+/g);
+        for (const id of variantIdMatches) {
+            foundVariants.add(id.toString());
+        }
+
+        // Cleanup the description
+        let descriptionString = rawDescription.replace(variantString, "");
+        descriptionString = descriptionString.replace(/^(\s|,|;|&|and)+/, "");
+        descriptionString = descriptionString.replace(/(\s|,|;|&|and)+$/, "");
+
+        const label = `${labelString} (${descriptionString})`;
         variantColumns.add(label);
 
-        // Find the variant to add this field to
+        // Add the value to the applicable variants
         for (const variantId of foundVariants) {
             let variantObject = variantObjectMap.get(variantId);
             if (!variantObject) {
