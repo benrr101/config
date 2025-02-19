@@ -9,6 +9,16 @@
 // ==/UserScript==
 
 // UTILITY METHODS /////////////////////////////////////////////////////////
+function getItemLabel(label, description, variant) {
+    let descriptionString = description.replace(variant, "");
+    descriptionString = descriptionString.replace(/^(\s|,|;|&|and)+/, "");
+    descriptionString = descriptionString.replace(/(\s|,|;|&|and)+$/, "");
+
+    return descriptionString
+        ? `${label} (${descriptionString})`
+        : label;
+}
+
 function renderSection(siblingSection, sectionName, contentFunc) {
     const siblingSectionDiv = siblingSection.parentElement;
     const siblingHeader = siblingSection.querySelector("header");
@@ -73,6 +83,7 @@ function handleReleasePageMatrixBarcodeReady() {
 
     // 2) Parse items into an array of variants
     const generalItems = [];
+    const allVariantItems = [];
     const variantObjectMap = new Map();
     const variantColumns = new Set();
     for (let item of items) {
@@ -96,60 +107,81 @@ function handleReleasePageMatrixBarcodeReady() {
         const rawDescription = descriptionMatch[1];
         const labelString = rawLabel.replace(descriptionMatch[0], "").trim();
 
-        // @TODO: Handle "All Variants"
+        const allVariantMatch = rawDescription.match(/All Variants/i);
+        if (allVariantMatch) {
+            // Item applies to all variants
+            const label = getItemLabel(labelString, rawDescription, allVariantMatch[0]);
+            variantColumns.add(label);
 
-        // Find variant values
-        const variantMatch = rawDescription.match(/Variant(?:s?)\s*\b\d+\s*(?:-\s*\d+|to\s*\d+)?\b(?:\s*(?:,|&|and|,\s*&|,\s*and)\s*\b\d+\s*(?:-\s*\d+|to\s*\d+)?\b)*/i);
-        if (!variantMatch) {
-            // This item doesn't have any descriptions listed
-            generalItems.push({ label: rawLabel, value: rawValue });
-            continue;
-        }
-
-        const foundVariants = new Set();
-        let variantString = variantMatch[0];
-
-        // Extract variant ranges
-        const variantRangeMatches = variantString.matchAll(/(\d+)\s*(?:-|to)\s*(\d+)/gi);
-        for (const range of variantRangeMatches) {
-            const lowerBound = parseInt(range[1]);
-            const upperBound = parseInt(range[2]);
-            for (let i = lowerBound; i <= upperBound; i++) {
-                foundVariants.add(i.toString());
+            allVariantItems.push({ label: label, value: rawValue });
+        } else {
+            // Item applies to specific variants
+            // Find variant values
+            const variantMatch = rawDescription.match(/Variant(?:s?)\s*\b\d+\s*(?:-\s*\d+|to\s*\d+)?\b(?:\s*(?:,|&|and|,\s*&|,\s*and)\s*\b\d+\s*(?:-\s*\d+|to\s*\d+)?\b)*/i);
+            if (!variantMatch) {
+                // This item doesn't have any descriptions listed
+                generalItems.push({ label: rawLabel, value: rawValue });
+                continue;
             }
 
-            variantString = variantString.replace(range[0], "");
-        }
+            const foundVariants = new Set();
+            let variantString = variantMatch[0];
 
-        // Extract exact numbers
-        const variantIdMatches = variantString.matchAll(/\d+/g);
-        for (const id of variantIdMatches) {
-            foundVariants.add(id.toString());
-        }
+            // Extract variant ranges
+            const variantRangeMatches = variantString.matchAll(/(\d+)\s*(?:-|to)\s*(\d+)/gi);
+            for (const range of variantRangeMatches) {
+                const lowerBound = parseInt(range[1]);
+                const upperBound = parseInt(range[2]);
+                for (let i = lowerBound; i <= upperBound; i++) {
+                    foundVariants.add(i.toString());
+                }
 
-        // Cleanup the description
-        let descriptionString = rawDescription.replace(variantString, "");
-        descriptionString = descriptionString.replace(/^(\s|,|;|&|and)+/, "");
-        descriptionString = descriptionString.replace(/(\s|,|;|&|and)+$/, "");
-
-        const label = `${labelString} (${descriptionString})`;
-        variantColumns.add(label);
-
-        // Add the value to the applicable variants
-        for (const variantId of foundVariants) {
-            let variantObject = variantObjectMap.get(variantId);
-            if (!variantObject) {
-                // Create and store new variant object
-                variantObject = {};
-                variantObjectMap.set(variantId, variantObject);
+                variantString = variantString.replace(range[0], "");
             }
 
-            // Set the value on the variant
-            if (variantObject[label]) {
-                variantObject[label].push(rawValue);
-            } else {
-                variantObject[label] = [rawValue];
+            // Extract exact numbers
+            const variantIdMatches = variantString.matchAll(/\d+/g);
+            for (const id of variantIdMatches) {
+                foundVariants.add(id.toString());
             }
+
+            // Cleanup the description
+            const label = getItemLabel(labelString, rawDescription, variantString);
+            variantColumns.add(label);
+
+            // Add the value to the applicable variants
+            for (const variantId of foundVariants) {
+                let variantObject = variantObjectMap.get(variantId);
+                if (!variantObject) {
+                    // Create and store new variant object
+                    variantObject = {};
+                    variantObjectMap.set(variantId, variantObject);
+                }
+
+                // Set the value on the variant
+                if (variantObject[label]) {
+                    variantObject[label].push(rawValue);
+                } else {
+                    variantObject[label] = [rawValue];
+                }
+            }
+        }
+    }
+
+    // 2.1 Apply "All Variant" items to all found variants
+    if (variantObjectMap.size > 0) {
+        for (const variantObject of variantObjectMap.values()) {
+            for (const item of allVariantItems) {
+                if (variantObject[item.label]) {
+                    variantObject[item.label].push(item.value);
+                } else {
+                    variantObject[item.label] = [item.value];
+                }
+            }
+        }
+    } else {
+        for (const item of allVariantItems) {
+            generalItems.push(item);
         }
     }
 
