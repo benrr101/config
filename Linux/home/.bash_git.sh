@@ -1,1 +1,0 @@
-../../Cross-Plat/Bash/.bash_git.sh

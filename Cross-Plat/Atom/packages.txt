@@ -1,4 +1,0 @@
-file-watcher
-language-batch
-language-powershell
-language-sln
