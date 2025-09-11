@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 # CONSTANTS ----------------------------------------------------------------
 STATE_DIR=".git/recursive-rebase-state" # Technically the state directory is in the local directory
                                         # which may or may not be the root of the repository. Since
@@ -12,6 +13,10 @@ STATE_FILE="$STATE_DIR/state"           # Contains:
                                         # 1) Index of ref to rebase in current step
                                         # 2) Ref to start rebasing from in current step (divergent
                                         #    ref)
+
+# GLOBALS ------------------------------------------------------------------
+declare -a STATE
+declare -a REFLIST
 
 # HELPER FUNCTIONS ---------------------------------------------------------
 function abort_recursive_rebase {
@@ -26,6 +31,14 @@ function abort_recursive_rebase {
   # Cleanup and report success
   cleanup_state
   log_success "Recursive rebase aborted"
+}
+
+function cleanup_state {
+  if [[ -d "$STATE_DIR" ]]
+  then
+    rm -rf "$STATE_DIR"
+    log_info "Cleaned up recursive rebase state"
+  fi
 }
 
 function continue_recursive_rebase {
@@ -60,60 +73,59 @@ function continue_recursive_rebase {
   # * next_start_ref  <= git ref-parse $local_stop_ref = 0x234 (feat2)
 
   # Load the state from disk
-  local state
-  mapfile -t state < load_state
+  load_state
+  local -a state=("${STATE[@]}")
 
-  local reflist
-  mapfile -t reflist < load_reflist
+  load_reflist
+  local -a reflist=("${REFLIST[@]}")
 
   # Setup the local state for the starting iteration
   local local_start_ref="${state[2]}"
   local local_onto_ref="${state[0]}"
 
   # Iterate over the (remaining) rebase operations until we either fail or complete all of them
-  for ((i=current_index; i<${branches[@]}; i++))
+  for ((i=current_index; i<${#reflist[@]}; i++))
   do
     # Read the rest of the state to initialize for the rebase operation
     local local_stop_ref="${reflist[$i]}"
     local next_start_ref
-    next_start_ref=$(git ref-parse "$local_stop_ref")
+    next_start_ref=$(git rev-parse "$local_stop_ref")
 
     # If we are in the middle of a rebase, then we need to continue it
-    git status --porcelain=v1 2>/dev/null | grep -q "^[ADM]"
-    if [[ $? -eq 0 ]]
+    if git status --porcelain=v1 2>/dev/null | grep -q "^[ADM]"
     then
       # We are in the middle of a rebase iteration, --continue it
-      log_info "Continuing current git rebase $local_start_ref to $local_end_ref onto $onto_ref"
+      log_info "Continuing current git rebase $local_start_ref to $local_stop_ref onto $local_onto_ref"
 
-      git rebase --continue
-      if [[ $? -ne 0 ]]
+      if ! git rebase --continue
       then
         # Note: No need to save state, it hasn't changed
-        log_warning "Rebase continue detected conflicts for $local_end_ref"
+        log_warning "Rebase continue detected conflicts for $local_stop_ref"
         log_info "Resolve conflicts and run: git-recursive-rebase --continue"
         exit 1
       fi
     else
       # We are not in the middle of a rebase iteration, start it
-      log_info "Rebasing $local_start_ref to $local_end_ref onto $local_onto_ref"
+      log_info "Rebasing $local_start_ref to $local_stop_ref onto $local_onto_ref"
 
-      git rebase --onto "$onto_ref" "$start_ref" "$end_ref"
-      if [[ $? -ne 0 ]]
+      if ! git rebase --onto "$local_onto_ref" "$local_start_ref" "$local_stop_ref"
       then
         save_state "$local_onto_ref" "$i" "$local_start_ref"
-        log_warning "Rebase detected conflicts for $local_end_ref"
+        log_warning "Rebase detected conflicts for $local_stop_ref"
         log_info "Resolve conflicts and run: git-recursive-rebase --continue"
+        exit 1
       fi
     fi
 
-    log_info "Successfully rebased $local_end_ref"
+    log_info "Successfully rebased $local_stop_ref"
 
     # Rebase succeeded - update state
     local_start_ref=$next_start_ref
-    local_onto_ref=$local_start_ref
+    local_onto_ref=$local_stop_ref
   done
 
-  # All rebase operations completed successfully!
+  # Done!
+  cleanup_state
   log_success "All branches rebased successfully!"
 }
 
@@ -177,7 +189,7 @@ function load_reflist {
     exit 1
   fi
 
-  cat "$REFLIST_FILE"
+  mapfile -t REFLIST < "$REFLIST_FILE"
 }
 
 function load_state {
@@ -187,7 +199,7 @@ function load_state {
     exit 1
   fi
 
-  cat "$STATE_FILE"
+  mapfile -t STATE < "$STATE_FILE"
 }
 
 function log_error {
@@ -195,15 +207,15 @@ function log_error {
 }
 
 function log_info {
-  echo -e "\033[0;34m[INFO]\33[0m $1"
+  echo -e "\033[0;34m[INFO]\033[0m $1"
 }
 
 function log_success {
-  echo -e "\033[0;32m[DONE]\33[0m $1"
+  echo -e "\033[0;32m[DONE]\033[0m $1"
 }
 
 function log_warning {
-  echo -w "\033[0;33m[WARN]\33[0m $1"
+  echo -e "\033[0;33m[WARN]\033[0m $1"
 }
 
 function perform_rebase {
@@ -236,7 +248,7 @@ function save_state {
   start_ref=$3
 
   mkdir -p "$STATE_DIR"
-  cat > "$REFLIST_FILE" << EOF
+  cat > "$STATE_FILE" << EOF
 ${onto_ref}
 ${current_index}
 ${start_ref}
@@ -315,7 +327,7 @@ function start_recursive_rebase {
   save_state "$onto_ref" "0" "$start_ref"
 
   # Start the rebase process
-  run_recursive_rebase
+  continue_recursive_rebase
 }
 
 # MAIN FUNCTION ------------------------------------------------------------
@@ -342,6 +354,7 @@ function main {
         exit 1
       fi
 
+      continue_recursive_rebase
       ;;
 
     --abort)
