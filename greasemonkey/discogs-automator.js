@@ -292,8 +292,17 @@ async function handleCreateMasterRelease(stateObject) {
                         .forEach(c => c.style["display"] = "none");
 
                     // If row is for a master release, just skip over it
-                    const rowParent = cell.parentNode;
-                    const releaseHref = rowParent.querySelector("td:nth-child(3) > a")?.href
+                    const titleCell = cell.parentNode.querySelector("td:nth-child(3)");
+                    if (!titleCell) {
+                        continue;
+                    }
+
+                    let titleAs = titleCell.querySelectorAll("a");
+                    if (titleAs.length === 0) {
+                        continue;
+                    }
+
+                    const releaseHref = titleAs[titleAs.length - 1]?.href;
                     if (!releaseHref) {
                         continue;
                     }
@@ -408,6 +417,17 @@ async function handleCreateMasterRelease(stateObject) {
             break;
 
         case 2:
+            let masterReleaseLink = document.querySelector('span[class=alert-message-text] > strong > a');
+            if (!masterReleaseLink) {
+                fail("Failed to submit master release edits.");
+                return;
+            }
+
+            logMessage("Redirecting to new release page...");
+
+            window.location.href = masterReleaseLink.href;
+
+        case 3:
             logMessage("Completed creation of master release");
             clearState();
 
@@ -692,7 +712,10 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
                 {label: "Approve", value: "approve"},
                 {label: "Reject", value: "reject"}
             ];
-            let releaseApprovalChoice = await logAction("Please review preview and approve or reject:", releaseApprovalActions).promise;
+            let releaseApprovalChoice = await logAction(
+                "Please review preview and approve or reject:",
+                releaseApprovalActions
+            ).promise;
 
             // Step 8.3: Regardless of choice, show the submit button and remove instructions
             submitInstructions.remove();
@@ -738,18 +761,45 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
             stateObject.stateId++;
             storeState(actionId, stateObject);
 
+            // Ask user which release should be the key release
+            let keyReleaseActions = [
+                {label: "Existing Release", value: "existing"},
+                {label: "New Release", value: "new"}
+            ];
+            let keyReleaseChoice = await logAction(
+                "Which release should be the key release?",
+                keyReleaseActions
+            ).promise;
+            let keyReleaseIsNewRelease = keyReleaseChoice === keyReleaseActions[1].value;
+
             if (stateObject.masterId) {
-                // Master release exists, add to the current one (and make it the key release)
-                // @TODO: Use some logic for determining if the release should be key. Vinyl should always be higher ranked.
-                await addReleaseToMaster(stateObject.newId, true);
+                // Master release exists, add to existing release
+                await addReleaseToMaster(stateObject.newId, keyReleaseIsNewRelease);
             } else {
                 // Master release does not exist, create new one (and make it the key release)
-                await setReleasesForMaster([stateObject.newId, stateObject.originalId], stateObject.newId);
+                let newKeyRelease = keyReleaseIsNewRelease ? stateObject.newId : stateObject.originalId;
+                await setReleasesForMaster([stateObject.newId, stateObject.originalId], newKeyRelease);
             }
 
             break;
 
         case 5:
+            // This is the confirmation page, check for success, then redirect to new release page
+            let masterReleaseLink = document.querySelector('span[class=alert-message-text] > strong > a');
+            if (!masterReleaseLink) {
+                fail("Failed to submit master release edits.");
+                return;
+            }
+
+            logMessage("Redirecting to new release page...");
+
+            stateObject.stateId++;
+            storeState(actionId, stateObject);
+
+            window.location = `https://www.discogs.com/release/${stateObject.newId}`;
+            break;
+
+        case 6:
             logMessage("Completed duplicate as digital");
             clearState();
 
@@ -1099,8 +1149,22 @@ function toggleMenu() {
     document.getElementsByTagName('head')[0].appendChild(style);
 
     // Determine if user is logged in
-    let loggedInButton = document.querySelector('button[aria-label^="Logged in as"]');
-    if (!loggedInButton) {
+    // As-of 2025-10-13, the account button is in a shadow root object, we have to break in to get
+    // to the juicy bits inside.
+    let headerDiv = document.querySelector('div[id^=__header_root]');
+    if (!headerDiv) {
+        console.error("Failed to find header div");
+        beginLoggedOut();
+        return;
+    }
+    let headerShadowRoot = headerDiv.shadowRoot;
+    if (!headerShadowRoot) {
+        console.error("Failed to find header shadow root");
+        beginLoggedOut();
+        return;
+    }
+    let accountButton = headerShadowRoot.querySelector('button[aria-label^="Logged in as"]');
+    if (!accountButton) {
         beginLoggedOut();
         return;
     }
