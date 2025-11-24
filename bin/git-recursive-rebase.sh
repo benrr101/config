@@ -301,13 +301,6 @@ function start_recursive_rebase {
     exit 1
   fi
 
-  # Check if there's already a rebase in progress
-  if [[ -d "$STATE_DIR" ]]
-  then
-    log_error "A recursive rebase is already in progress. Use --continue or --abort"
-    exit 1
-  fi
-
   # Get the branch chain
   # @TODO: Allow for bypassing if reflist is provided directly
   log_info "Discovering branch chain from '$start_ref' to '$end_ref'..."
@@ -372,6 +365,12 @@ function main {
       then
         log_error "Invalid arguments for --onto"
         show_usage
+        exit 1
+      fi
+
+      if [[ -d "$STATE_DIR" ]]
+      then
+        log_error "A recursive rebase is already in progress. Use --continue or --abort"
         exit 1
       fi
 
