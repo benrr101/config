@@ -39,6 +39,58 @@ function abort_goofup {
   log_success "Goofup aborted"
 }
 
+function auto_goofup {
+  local ref_to_fix="$1"
+
+  # 0) Validate there are local changes worth stashing
+  if git diff --quiet && git diff --cached --quiet
+  then
+    log_error "--auto requires uncommitted changes to stash and apply, but the working tree is clean."
+    exit 1
+  fi
+
+  # 1) Stash current changes
+  log_info "Stashing current changes..."
+  if ! git stash
+  then
+    log_error "Failed to stash changes"
+    exit 1
+  fi
+
+  # 2) Start goofup (create temp branch, save state)
+  start_goofup "$ref_to_fix"
+
+  #3) Pop the stash
+  log_info "Popping stash onto temp branch..."
+  if ! git stash pop
+  then
+    log_error "Stash pop failed. Check any error messages above. Aborting goofup..."
+    abort_goofup
+    exit 1
+  fi
+
+  # 4) Stage all changes
+  log_info "Staging all changes..."
+  if ! git add -u
+  then
+    log_error "Failed to stage changes. Aborting goofup."
+    abort_goofup
+    exit 1
+  fi
+
+  # 5) Amend the commit
+  log_info "Amending commit at '$ref_to_fix'"
+  if ! git commit --amend --no-edit
+  then
+    log_error "Failed to amend commit. Aborting goofup."
+    abort_goofup
+    exit 1
+  fi
+
+  # 6) Complete the goofup
+  continue_goofup
+}
+
 function cleanup_state {
   if [[ -d "$STATE_DIR" ]]
   then
@@ -148,9 +200,11 @@ function save_state {
   local original_branch="$1"
   local temp_branch="$2"
   local ref_to_fix="$3"
+  local repo_root="$(git_repo_root)"
 
-  mkdir -p "$STATE_DIR"
-  cat > $"$STATE_FILE" << EOF
+  mkdir -p "$repo_root/$STATE_DIR"
+  cat > "$repo_root/$STATE_FILE" << EOF
+
 ${original_branch}
 ${temp_branch}
 ${ref_to_fix}
@@ -248,6 +302,8 @@ function main {
     exit 1
   fi
 
+  local repo_root=$(git_repo_root)
+
   # Check arguments to see what mode to run in
   case "${1:-}" in
     --help|-h)
@@ -255,7 +311,7 @@ function main {
       ;;
 
     --abort)
-      if [[ ! -d "$STATE_DIR" ]]
+      if [[ ! -d "$repo_root/$STATE_DIR" ]]
       then
         log_error "No goofup in progress"
         exit 1
@@ -265,7 +321,7 @@ function main {
       ;;
 
     --continue)
-      if [[ ! -d "$STATE_DIR" ]]
+      if [[ ! -d "$repo_root/$STATE_DIR" ]]
       then
         log_error "No goofup in progress"
         exit 1
@@ -282,13 +338,30 @@ function main {
         exit 1
       fi
 
-      if [[ -d "$STATE_DIR" ]]
+      if [[ -d "$repo_root/$STATE_DIR" ]]
       then
         log_error "A goofup is already in progress. Use --continue or --abort."
         exit 1
       fi
 
       start_goofup "$2"
+      ;;
+
+    --auto)
+      if [[ $# -ne 2 ]]
+      then
+        log_error "Invalid arguments for --auto"
+        show_usage
+        exit 1
+      fi
+
+      if [[ -d "$repo_root/$STATE_DIR" ]]
+      then
+        log_error "A goofup is already in progress. Use --continue or --abort."
+        exit 1
+      fi
+
+      auto_goofup "$2"
       ;;
 
     "")
