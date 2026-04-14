@@ -204,7 +204,6 @@ function save_state {
 
   mkdir -p "$repo_root/$STATE_DIR"
   cat > "$repo_root/$STATE_FILE" << EOF
-
 ${original_branch}
 ${temp_branch}
 ${ref_to_fix}
