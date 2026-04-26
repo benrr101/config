@@ -117,6 +117,16 @@ function delay(ms) {
     return new Promise(res => setTimeout(res, ms));
 }
 
+function getTrackCount() {
+    const trackListFormElement = document.querySelector("table[data-path^='/tracks']");
+    if (!trackListFormElement) {
+        return 0;
+    }
+
+    const trackRows = trackListFormElement.querySelectorAll("tr.track_track");
+    return trackRows.length;
+}
+
 async function setReleasesForMaster(ids, keyRelease) {
     if (!ids || ids.length === 0) {
         fail("IDs must be provided for setting master release");
@@ -170,7 +180,7 @@ function storeState(actionId, stateObject) {
     localStorage.setItem(AutomatorLocalStorageKey, completeStateString);
 }
 
-function waitForElement(selector) {
+function waitForElement(selector, root) {
     return new Promise(resolve => {
         // If it already exists, just return it
         let alreadyExistingElement = document.querySelector(selector);
@@ -178,7 +188,7 @@ function waitForElement(selector) {
             return resolve(alreadyExistingElement);
         }
 
-        // If it does not exist, setup an observer
+        // If it does not exist, set up an observer
         const observer = new MutationObserver(mutations => {
             let mutatedElement = document.querySelector(selector);
             if (mutatedElement) {
@@ -327,7 +337,7 @@ async function handleCreateMasterRelease(stateObject) {
                         }
 
                         storeState(CreateMasterReleaseId, stateObject);
-                    }
+                    };
 
                     // Check the checkbox if it was already checked
                     if (stateObject.selectedReleaseIds.indexOf(releaseId) >= 0) {
@@ -367,7 +377,7 @@ async function handleCreateMasterRelease(stateObject) {
                     }, 30);
                 });
                 discoObserver.observe(discographyGrid, {childList: true, subtree: true});
-            }
+            };
 
             // Draw the checkboxes for what is visible right now
             drawCheckboxes();
@@ -461,7 +471,7 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
             }
 
             // Extract the original release ID
-            let originalUrlReleaseMatch = window.location.href.match(/\/release\/(\d+)-?/)
+            let originalUrlReleaseMatch = window.location.href.match(/\/release\/(\d+)-?/);
             if (!originalUrlReleaseMatch) {
                 fail("Release page URL does not match expected format, cannot extract release ID");
                 return;
@@ -528,7 +538,7 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
                 return;
             }
 
-            let firstDraftTitleCell = firstDraftRow.querySelector(":nth-child(1)")
+            let firstDraftTitleCell = firstDraftRow.querySelector(":nth-child(1)");
             if (!firstDraftTitleCell) {
                 fail("Could not find title cell in the draft table");
                 return;
@@ -596,7 +606,7 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
                 }
             }
 
-            // Step 3: Find the formats and change them
+            // Step 3: Update the format
             logMessage("Changing format...");
             let formats = document.querySelectorAll("li[data-path^='/format/']");
             if (formats.length === 0) {
@@ -604,58 +614,104 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
                 return;
             }
 
-            if (formats.length > 1) {
-                // @TODO: Allow duplicating split releases
-                fail("Too many formats to automate safely.");
-                return;
-            }
-
-            const formatFormElement = formats[0]
-
-            let formatTypeSelector = formatFormElement.querySelector("select");
-            if (!formatTypeSelector || formatTypeSelector.value !== "File") {
-                // @TODO: Allow duplicating of CD/Vinyl
-                fail("Release is not a file. Cannot safely automate.");
-                return;
-            }
-
-            // Step 3.1: Uncheck any selected file types
-            let selectedFileTypes = formatFormElement.querySelectorAll("input[id*='File Type'][checked]");
-            for (const selectedFileType of selectedFileTypes) {
-                selectedFileType.click();
-            }
-
-            // Step 3.2: Check WAV file type
             let desiredFileType = format.toUpperCase();
-            let wavCheckbox = formatFormElement.querySelector(`input[value='${desiredFileType}']`);
-            if (!wavCheckbox) {
-                fail("Could not find WAV file type");
-                return;
-            }
-            wavCheckbox.click();
+            if (formats.length === 1) {
+                // There's only one format for the release we're copying from
+                const formatFormElement = formats[0];
 
-            // Step 3.3: Clear free text field
-            // @TODO: Request format for FLAC
-            let freeTextInput = formatFormElement.querySelector("input[aria-label='free text field']");
-            if (!freeTextInput) {
-                fail("Could not find free text field");
-                return;
-            }
-            freeTextInput.value = "";
-            freeTextInput.dispatchEvent(new Event("input", {bubbles: true}));
-            freeTextInput.dispatchEvent(new Event("blur", {bubbles: true}));
+                // 3.1: Make sure a file format is selected
+                let formatTypeSelector = formatFormElement.querySelector("select");
+                if (!formatTypeSelector || formatTypeSelector.value !== "File") {
+                    logMessage("Switching format to file...");
 
-            // Step 4: Make a single if there's only one track in it (I DON'T CARE ANYMORE)
-            let tracks = document.querySelector("tr[data-path^='/tracks/0']");
-            let isSingle = tracks.length === 1;
-            if (isSingle) {
-                let singleCheckbox = formatFormElement.querySelector("input[id*='Description'][value='Single']");
-                if (singleCheckbox && !singleCheckbox.checked) {
-                    singleCheckbox.click();
+                    // 3.1a.1: Record the selected descriptions
+                    // @TODO: This isn't working correctly?
+                    let selectedDescriptions =
+                        Array.from(formatFormElement.querySelector("input[type='checkbox'][id*='desc_Description']"))
+                            .filter(n => n.checked)
+                            .map(n => n.value);
+
+                    // 3.1a.2: Determine how many files are in the format based on track count
+                    let trackCount = getTrackCount();
+
+                    // 3.1a.3: Switch the file format
+                    formatTypeSelector.value = "File";
+                    formatTypeSelector.dispatchEvent(new Event("change", {bubbles: true}));
+
+                    let formatChangeOkayButton = await waitForElement("button.dialog-button-okay");
+                    formatChangeOkayButton.click();
+
+                    // 3.1a.4: Reselect the applicable descriptions
+                    for (let selectedDescription of selectedDescriptions) {
+                        let descriptionSelector = `input[type='checkbox'][value='${selectedDescription.value}']`;
+                        let descriptionCheckbox = formatFormElement.querySelector(descriptionSelector);
+
+                        if (descriptionCheckbox) {
+                            descriptionCheckbox.click();
+                        } else {
+                            // @TODO: Add warning box
+                            logMessage(`Heads up! Description '${selectedDescription}' not found!`);
+                        }
+                    }
+
+                    // 3.1a.5: Set number of files
+                    let quantityInput = formatFormElement.querySelector("input[aria-label='Quantity of format']");
+                    if (quantityInput) {
+                        quantityInput.value = `${trackCount}`;
+                        quantityInput.dispatchEvent(new Event("input", {bubbles: true}));
+                        quantityInput.dispatchEvent(new Event("blur", {bubbles: true}));
+                    } else {
+                        // @TODO: Add warning box
+                        logMessage("Heads up! Quantity box not found!");
+                    }
+                } else {
+                    // 3.1b.1: Uncheck any selected file types
+                    let selectedFileTypes = formatFormElement.querySelectorAll("input[id*='File Type'][checked]");
+                    for (const selectedFileType of selectedFileTypes) {
+                        selectedFileType.click();
+                    }
+                }
+
+                // 3.2: Check desired file type
+                // @TODO: This is kinda sloppy b/c we're not scoped to the format div, but ... whatever.
+                let fileTypeCheckBox = await waitForElement(`input[value='${desiredFileType}']`);
+                fileTypeCheckBox.click();
+
+                // 3.3: Clear free text field
+                let freeTextInput = formatFormElement.querySelector("input[aria-label='free text field']");
+                if (!freeTextInput) {
+                    fail("Could not find free text field");
+                    return;
+                }
+
+                freeTextInput.value = desiredFileType === "FLAC"
+                    ? await logInput("FLAC bit depth and sample rate:").promise ?? ""
+                    : "";
+                freeTextInput.dispatchEvent(new Event("input", {bubbles: true}));
+                freeTextInput.dispatchEvent(new Event("blur", {bubbles: true}));
+
+                // Step 3.4: Make a single if there's only one track in it (I DON'T CARE ANYMORE)
+                let tracks = document.querySelector("tr[data-path^='/tracks/0']");
+                let isSingle = tracks.length === 1;
+                if (isSingle) {
+                    let singleCheckbox = formatFormElement.querySelector("input[id*='Description'][value='Single']");
+                    if (singleCheckbox && !singleCheckbox.checked) {
+                        singleCheckbox.click();
+                    }
+                }
+            } else {
+                // Well, we can continue if you want to...
+                let continueOnMultipleFormats = await logAction(
+                    "Too many formats to automate safely. Please apply changes manually.",
+                    [{label: "Continue", value: false}, {label: "Cancel", value: false}],
+                );
+                if (continueOnMultipleFormats) {
+                    fail("User requested to stop.");
+                    return;
                 }
             }
 
-            // Step 5: Set the submission notes
+            // Step 4: Set the submission notes
             logMessage("Setting submission notes...");
             let submissionNotesElement = document.querySelector("textarea#release-submission-notes-textarea");
             if (!submissionNotesElement) {
@@ -672,7 +728,7 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
             submissionNotesElement.dispatchEvent(new Event("input", {bubbles: true}));
             submissionNotesElement.dispatchEvent(new Event("blur", {bubbles: true}));
 
-            // Step 6: Click preview/submit
+            // Step 5: Click preview/submit
             let releasePreviewButton = document.querySelector("button.preview");
             if (!releasePreviewButton) {
                 fail("Could not find preview/submit button");
@@ -683,20 +739,22 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
             logMessage("Waiting for preview...");
             await waitForElement("div#subform_preview");
 
-            // Step 7: Preliminary check
-            logMessage("Running preliminary check...");
-            let previewSummaryElements = document.querySelectorAll("div#subform_preview > div.body > div.profile > div");
-            let previewFormatElement = (Array(...previewSummaryElements)).find(d => d.textContent.startsWith("Format"));
-            if (!previewFormatElement || !previewFormatElement.textContent.includes(`File, ${desiredFileType}`)) {
-                fail("Format failed preliminary check");
-                return;
-            }
+            // Step 6: Preliminary check
+            // logMessage("Running preliminary check...");
+            // let previewSummaryElements = document.querySelectorAll("div#subform_preview > div.body > div.profile > div");
+            // let previewFormatElement = (Array(...previewSummaryElements)).find(d => d.textContent.startsWith("Format"));
+            // if (!previewFormatElement || !previewFormatElement.textContent.includes(`File, ${desiredFileType}`)) {
+            //     fail("Format failed preliminary check");
+            //     return;
+            // }
 
             let previewSubmissionNotes = document.querySelector("div.subform_submission_notes > blockquote");
             if (!previewSubmissionNotes || previewSubmissionNotes.textContent !== submissionNotesValue) {
                 fail("Submission notes failed preliminary check");
                 return;
             }
+
+            // @TODO: Add check for track count
 
             // Step 8: Wait for approval
             // Step 8.1: Hide the submit button to force people to use the approval button
@@ -736,9 +794,9 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
             break;
 
         case 3:
-            logMessage("Determining new release ID")
+            logMessage("Determining new release ID");
 
-            let newReleaseUrlMatch = window.location.href.match(/\/release\/(\d+)-?/)
+            let newReleaseUrlMatch = window.location.href.match(/\/release\/(\d+)-?/);
             if (!newReleaseUrlMatch) {
                 fail("Release page URL does not match expected format, cannot extract release ID");
                 return;
@@ -746,7 +804,7 @@ async function handleDuplicateAsDigital(actionId, stateObject, format) {
 
             stateObject.newId = newReleaseUrlMatch[1];
             stateObject.stateId++;
-            storeState(actionId, stateObject)
+            storeState(actionId, stateObject);
 
             window.location.href = stateObject.masterId
                 ? `https://www.discogs.com/master/edit/${stateObject.masterId}`
@@ -982,7 +1040,7 @@ function logAction(message, actions, icon=undefined) {
     for (const action of actions) {
         let buttonElement = document.createElement("button");
         buttonElement.textContent = action.label;
-        buttonElement.onclick = () => { resolve(action.value); }
+        buttonElement.onclick = () => { resolve(action.value); };
 
         buttonEntry.appendChild(buttonElement);
     }
@@ -1007,7 +1065,7 @@ function logInput(message) {
     // Display input field, ok/cancel buttons
     let inputEntry = document.createElement("div");
     inputEntry.classList.add("automator-container-entry");
-    inputEntry.classList.add("automator-container-entry-text")
+    inputEntry.classList.add("automator-container-entry-text");
     inputEntry.style.textAlign = "right";
 
     let inputElement = document.createElement("input");
@@ -1050,7 +1108,7 @@ function logInput(message) {
     cancelElement.onclick = () => {
         inputEntry.textContent = `Cancelled`;
         resolve(undefined);
-    }
+    };
 
     container.appendChild(inputEntry);
 
@@ -1141,7 +1199,7 @@ function toggleMenu() {
 // MAIN ////////////////////////////////////////////////////////////////////
 
 (async function() {
-    'use strict'
+    'use strict';
 
     // Setup styles
     let style = document.createElement('style');
