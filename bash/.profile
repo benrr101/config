@@ -17,4 +17,10 @@ then
     PATH="$HOME/.dotnet/tools:$PATH"
 fi
 
+## Add rust cargo if it's installed
+if [[ -d "$HOME/.cargo" ]]
+then
+    PATH="$HOME/.cargo:$PATH"
+fi
+
 export PATH

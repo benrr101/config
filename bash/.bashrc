@@ -22,7 +22,6 @@ then
   PLATFORM="GIT"
 fi
 
-
 # GLOBAL DEFS ##############################################################
 ## Turn off "zsh is default" warning on MacOS
 if [[ "$PLATFORM" == 'Darwin' ]]
@@ -59,6 +58,20 @@ else
   alias ls='ls --color=auto'
 fi
 
+# Flatpak aliases
+which flatpak > $NULL 2>&1
+if [[ $? -eq 0 ]]
+then
+  
+  # Protontricks
+  flatpak info com.github.Matoking.protontricks > /dev/null 2>&1
+  if [[ $? -eq 0 ]]
+  then
+    alias protontricks='flatpak run com.github.Matoking.protontricks'
+  fi
+
+fi
+
 # RHEL PROMPT ##############################################################
 if [[ -t 1 ]]
 then
@@ -74,6 +87,7 @@ fi
 if [[ -e ~/.nvm ]]
 then
   source ~/.nvm/nvm.sh
+  source ~/.nvm/bash_completion
 fi
 
 ## rbenv initialization
@@ -84,6 +98,7 @@ then
 fi
 
 ## WSL mounted drive aliases
+# @TODO: This ... uh ... doesn't work.
 if [[ "$PLATFORM" == 'WSL' ]]
 then
   for mnt_path in /mnt/*
@@ -104,5 +119,3 @@ if [ -f ~/.profile ]
 then
     . ~/.profile
 fi
-
-
