@@ -20,7 +20,7 @@ fi
 ## Add rust cargo if it's installed
 if [[ -d "$HOME/.cargo" ]]
 then
-    PATH="$HOME/.cargo:$PATH"
+    PATH="$HOME/.cargo/bin:$PATH"
 fi
 
 export PATH
